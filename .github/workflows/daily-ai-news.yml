@@ -1,0 +1,41 @@
+# GitHub Actions 定时任务：每天北京时间 08:00 自动抓取并发送AI资讯邮件
+# 使用方法：在GitHub仓库中创建文件 .github/workflows/daily-ai-news.yml，粘贴本文件全部内容
+name: daily-ai-news
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # UTC 00:00 = 北京时间 08:00（实际触发可能延迟几分钟）
+  workflow_dispatch: {}    # 允许在Actions页面手动触发，用于测试
+
+permissions:
+  contents: write          # 允许保活提交
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 抓取并发送今日AI资讯
+        run: python ai_news_sender.py once
+        env:
+          SMTP_HOST: smtp.qq.com
+          SMTP_PORT: '465'
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          AUTH_CODE: ${{ secrets.AUTH_CODE }}
+          RECEIVER_EMAIL: ${{ secrets.RECEIVER_EMAIL }}
+
+      - name: 保活提交（防止仓库60天无活动导致定时任务被停用）
+        run: |
+          git config user.name "ai-news-bot"
+          git config user.email "bot@users.noreply.github.com"
+          echo "last_run: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > .last_run
+          git add .last_run
+          git commit -m "keep-alive: $(date -u +%F)" || echo "nothing to commit"
+          git push
